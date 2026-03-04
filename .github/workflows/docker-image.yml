@@ -102,7 +102,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./app            # 指向外部代码存放目录
-          file: ./Dockerfile        # 指定Dockerfile路径（默认根目录可省略）
+          file: ./app/Dockerfile        # 指定Dockerfile路径（默认根目录可省略）
           push: false                # 开启推送true
           tags: ${{ steps.gen_tags.outputs.tags }}  # 使用步骤6生成的标签
           platforms: linux/amd64,linux/arm64/v8  # 指定要构建的架构（AMD64 + ARM64） arm64/v8 是主流ARM架构（如树莓派4、云服务器ARM）
