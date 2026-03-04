@@ -68,11 +68,34 @@ jobs:
         id: gen_tags
         run: |
           # 镜像仓库地址（替换为你的Docker Hub仓库名）
-          IMAGE_NAME="${{ secrets.DOCKER_HUB_USERNAME}}/${{github.event.inputs.external_repo}}"
-          # 镜像标签：latest + 外部仓库 Tag
+          # 第一步：获取外部仓库地址（输入参数）
+          EXTERNAL_REPO="${{ github.event.inputs.external_repo }}"
+          echo "原始外部仓库地址：$EXTERNAL_REPO"
+          # 第二步：通用截取逻辑（适配所有格式）
+          # 1. 去掉 URL 协议/域名/后缀（如 .git）
+          # 2. 按 / 分割，取最后一段作为仓库名
+          REPO_NAME=$(echo "$EXTERNAL_REPO" | \
+            sed -e 's|^https://github.com/||' \
+                -e 's|^git@github.com:||' \
+                -e 's|.git$||' \
+                -e 's|.git/||' | \
+            awk -F '/' '{print $NF}')
+          # 输出截取结果（方便调试）
+          echo "截取的仓库名：$REPO_NAME"
+          
+          # 第三步：拼接合法的镜像标签（必填：你的 Docker Hub 用户名）
+          DOCKER_USERNAME="你的DockerHub用户名" # 替换为你的实际用户名！
+          IMAGE_REPO="${{ secrets.DOCKER_HUB_USERNAME}}/${REPO_NAME}"
           TARGET_TAG="${{ github.event.inputs.target_tag }}"
+
+          # 生成最终标签（格式：用户名/仓库名:latest、用户名/仓库名:v1.5.0）
           TAGS="${IMAGE_REPO}:latest,${IMAGE_REPO}:${TARGET_TAG}"
+          echo "最终镜像标签：$TAGS"
+
+          # 传递标签到下一步
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          # 传递仓库名（可选，后续可复用）
+          echo "repo_name=${REPO_NAME}" >> $GITHUB_OUTPUT
 
       # 步骤7：构建并推送多架构镜像
       - name: Build and push multi-arch image
