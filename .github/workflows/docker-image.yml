@@ -1,0 +1,69 @@
+# 工作流名称
+name: Auto Build and Push Docker Image
+
+# 触发条件：推送到main分支、创建v开头的标签时触发
+on:
+  # push:
+  #   branches: [ "main" ]  # 替换为你的主分支（如master）
+  #   tags: [ 'v*' ]        # 标签以v开头时触发（如v1.0.0）
+  # 可选：手动触发（方便测试）
+  workflow_dispatch:
+
+# 定义任务
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # 步骤1：检出项目代码（包含Dockerfile）
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 步骤2：设置Docker Buildx（增强构建能力，支持多平台）
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          install: true  # 确保安装最新版Buildx，支持多架构
+          
+      # 步骤3：登录Docker Hub（使用配置的密钥）
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      # 步骤4：生成镜像标签（区分分支/标签）
+      - name: Generate image tags
+        id: gen_tags
+        run: |
+          # 镜像基础名称（替换为你的Docker Hub仓库名）
+          IMAGE_NAME="${{ secrets.DOCKER_HUB_USERNAME }}/drawdb"
+          
+          # 如果是标签推送，使用标签名作为镜像标签；否则用latest
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            # 多标签：版本号 + latest（如v1.0.0和latest）
+            echo "tags=${IMAGE_NAME}:${TAG},${IMAGE_NAME}:latest" >> $GITHUB_OUTPUT
+          else
+            # 推分支时仅打latest标签
+            echo "tags=${IMAGE_NAME}:latest" >> $GITHUB_OUTPUT
+          fi
+
+      # 步骤5：构建并推送多架构镜像
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v5
+        with:
+          context: .                # Dockerfile所在目录（当前根目录）
+          file: ./Dockerfile        # 指定Dockerfile路径（默认根目录可省略）
+          push: true                # 开启推送
+          tags: ${{ steps.gen_tags.outputs.tags }}  # 使用步骤4生成的标签
+          platforms: linux/amd64,linux/arm64/v8  # 指定要构建的架构（AMD64 + ARM64） arm64/v8 是主流ARM架构（如树莓派4、云服务器ARM）
+          # 可选：启用缓存，加速后续构建（推荐开启）
+          cache-from: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/drawdb:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/drawdb:buildcache,mode=max
+          # 可选：如果Dockerfile有跨架构兼容问题，启用此选项
+          # build-args: |
+          #   ARCH=linux/arm64/v8
