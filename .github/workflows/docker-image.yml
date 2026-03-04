@@ -19,6 +19,11 @@ on:
         description: '要拉取的仓库 Tag（如 v1.0.0）'
         required: true
         default: 'v1.5.0' # 替换为你要的 Tag
+      # 选择架构（多选用英文逗号分隔）
+      platforms:
+        description: '选择架构（多选用英文逗号分隔）'
+        required: true
+        default: 'linux/amd64,linux/arm64/v8'
       # 开启推送
       isPush:
         type: choice
@@ -102,13 +107,17 @@ jobs:
           TARGET_TAG="${{ github.event.inputs.target_tag }}"
 
           # 生成最终标签（格式：用户名/仓库名:latest、用户名/仓库名:v1.5.0）
-          TAGS="${IMAGE_REPO}:latest,${IMAGE_REPO}:${TARGET_TAG}"
+          # TAGS="${IMAGE_REPO}:latest,${IMAGE_REPO}:${TARGET_TAG}"
+          TAGS="${IMAGE_REPO}:${TARGET_TAG}"
+
           echo "最终镜像标签：$TAGS"
 
           # 传递标签到下一步
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
           # 传递仓库名（可选，后续可复用）
           echo "repo_name=${REPO_NAME}" >> $GITHUB_OUTPUT
+          # 新增：传递完整镜像前缀
+          echo "image_repo=${IMAGE_REPO}" >> $GITHUB_OUTPUT
 
       # 步骤7：构建并推送多架构镜像
       - name: Build and push multi-arch image
@@ -118,10 +127,10 @@ jobs:
           file: ${{ github.event.inputs.dockerfile_path }}   # 指定 Dockerfile 的完整路径
           push: ${{ github.event.inputs.isPush }}            # 开启推送true
           tags: ${{ steps.gen_tags.outputs.tags }}           # 使用步骤6生成的标签
-          platforms: linux/amd64,linux/arm64/v8  # 指定要构建的架构（AMD64 + ARM64） arm64/v8 是主流ARM架构（如树莓派4、云服务器ARM）
+          platforms: ${{ github.event.inputs.platforms }}  # 指定要构建的架构（AMD64 + ARM64） arm64/v8 是主流ARM架构（如树莓派4、云服务器ARM）
           # 可选：启用缓存，加速后续构建（推荐开启）
-          cache-from: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/drawdb:buildcache
-          cache-to: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/drawdb:buildcache,mode=max
+          cache-from: type=registry,ref=${{ steps.gen_tags.outputs.image_repo }}:buildcache
+          cache-to: type=registry,ref=${{ steps.gen_tags.outputs.image_repo }}:buildcache,mode=max
           # 可选：如果Dockerfile有跨架构兼容问题，启用此选项
           # build-args: |
           #   ARCH=linux/arm64/v8
