@@ -18,7 +18,7 @@ on:
       target_tag:
         description: '要拉取的仓库 Tag（如 v1.0.0）'
         required: true
-        default: 'v1.0.0' # 替换为你要的 Tag
+        default: 'v1.5.0' # 替换为你要的 Tag
         
 # 定义任务
 jobs:
