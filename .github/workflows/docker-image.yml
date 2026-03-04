@@ -19,6 +19,7 @@ on:
         description: '要拉取的仓库 Tag（如 v1.0.0）'
         required: true
         default: 'v1.5.0' # 替换为你要的 Tag
+      # 开启推送
       isPush:
         type: choice
         description: '开启推送'
@@ -27,6 +28,11 @@ on:
           - false
         required: true
         default: 'false'
+      # Dockerfile路径
+      dockerfile_path:
+        description: 'Dockerfile路径（外部代码在./app目录下）'
+        required: true
+        default: './app/Dockerfile' # 替换为你的目标仓库
 # 定义任务
 jobs:
   build-and-push:
@@ -108,10 +114,10 @@ jobs:
       - name: Build and push multi-arch image
         uses: docker/build-push-action@v5
         with:
-          context: ./app             # 指向外部代码存放目录
-          file: ./app/Dockerfile     # 指定 Dockerfile 的完整路径
-          push: ${{ github.event.inputs.isPush }}   # 开启推送true
-          tags: ${{ steps.gen_tags.outputs.tags }}  # 使用步骤6生成的标签
+          context: ./app                                     # 指向外部代码存放目录
+          file: ${{ github.event.inputs.dockerfile_path }}   # 指定 Dockerfile 的完整路径
+          push: ${{ github.event.inputs.isPush }}            # 开启推送true
+          tags: ${{ steps.gen_tags.outputs.tags }}           # 使用步骤6生成的标签
           platforms: linux/amd64,linux/arm64/v8  # 指定要构建的架构（AMD64 + ARM64） arm64/v8 是主流ARM架构（如树莓派4、云服务器ARM）
           # 可选：启用缓存，加速后续构建（推荐开启）
           cache-from: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/${{github.event.inputs.external_repo}}:buildcache
