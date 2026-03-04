@@ -20,14 +20,21 @@ on:
         required: true
         default: 'v1.5.0' # 替换为你要的 Tag
       # 选择架构（多选用英文逗号分隔）
-      platforms:
-        description: '选择架构（多选用英文逗号分隔）'
+      build_platforms:
+        type: choice
+        description: '选择构建架构（多选组合）'
         required: true
-        default: 'linux/amd64,linux/arm64/v8'
-      # 开启推送
+        options:
+          - linux/amd64（仅x86）
+          - linux/arm64/v8（仅ARM64）
+          - linux/arm/v7（仅ARMv7/树莓派）
+          - linux/amd64,linux/arm64/v8（x86+ARM64）
+          - linux/amd64,linux/arm64/v8,linux/arm/v7（全架构）
+        default: 'linux/amd64,linux/arm64/v8（x86+ARM64）'
+      # 是否推送镜像到Docker Hub
       isPush:
         type: choice
-        description: '开启推送'
+        description: '是否推送镜像到Docker Hub'
         options:
           - true
           - false
@@ -118,16 +125,25 @@ jobs:
           echo "repo_name=${REPO_NAME}" >> $GITHUB_OUTPUT
           # 新增：传递完整镜像前缀
           echo "image_repo=${IMAGE_REPO}" >> $GITHUB_OUTPUT
-
-      # 步骤7：构建并推送多架构镜像
+          
+      # 步骤7：解析选择的架构（去掉括号说明，只保留架构值）
+      - name: Parse build platforms
+        id: parse_platforms
+        run: |
+          # 去掉选择项中的括号和说明文字，只保留架构值
+          PLATFORMS=$(echo "${{ github.event.inputs.build_platforms }}" | sed -e 's/（.*）//g')
+          echo "最终构建架构：$PLATFORMS"
+          echo "platforms=$PLATFORMS" >> $GITHUB_OUTPUT
+          
+      # 步骤8：构建并推送多架构镜像
       - name: Build and push multi-arch image
         uses: docker/build-push-action@v5
         with:
           context: ./app                                     # 指向外部代码存放目录
           file: ${{ github.event.inputs.dockerfile_path }}   # 指定 Dockerfile 的完整路径
-          push: ${{ github.event.inputs.isPush }}            # 开启推送true
+          push: ${{ github.event.inputs.isPush == 'true' }}  # 开启推送true  布尔值判断（避免字符串解析问题）
           tags: ${{ steps.gen_tags.outputs.tags }}           # 使用步骤6生成的标签
-          platforms: ${{ github.event.inputs.platforms }}  # 指定要构建的架构（AMD64 + ARM64） arm64/v8 是主流ARM架构（如树莓派4、云服务器ARM）
+          platforms: ${{ steps.parse_platforms.outputs.platforms }} # 使用解析后的架构 
           # 可选：启用缓存，加速后续构建（推荐开启）
           cache-from: type=registry,ref=${{ steps.gen_tags.outputs.image_repo }}:buildcache
           cache-to: type=registry,ref=${{ steps.gen_tags.outputs.image_repo }}:buildcache,mode=max
