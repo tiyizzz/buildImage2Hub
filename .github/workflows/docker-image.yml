@@ -33,8 +33,8 @@ jobs:
       - name: Checkout external public repo
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.inputs.external_repo || 'drawdb-io/drawdb' }} # 外部仓库地址
-          ref: ${{ github.event.inputs.target_tag || 'v1.0.0' }} # 核心：指定 Tag 版本
+          repository: ${{ github.event.inputs.external_repo }} # 外部仓库地址
+          ref: ${{ github.event.inputs.target_tag }} # 核心：指定 Tag 版本
           path: ./app # 代码下载到当前工作目录的 app 文件夹（避免路径问题）
           # 公共仓库无需 token，注释掉即可
           # token: ${{ secrets.EXTERNAL_REPO_PAT }}
@@ -70,7 +70,7 @@ jobs:
           # 镜像仓库地址（替换为你的Docker Hub仓库名）
           IMAGE_NAME="${{ secrets.DOCKER_HUB_USERNAME}}/${{github.event.inputs.external_repo}}"
           # 镜像标签：latest + 外部仓库 Tag
-          TARGET_TAG="${{ github.event.inputs.target_tag || 'v1.0.0' }}"
+          TARGET_TAG="${{ github.event.inputs.target_tag }}"
           TAGS="${IMAGE_REPO}:latest,${IMAGE_REPO}:${TARGET_TAG}"
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
 
@@ -80,7 +80,7 @@ jobs:
         with:
           context: ./app            # 指向外部代码存放目录
           file: ./Dockerfile        # 指定Dockerfile路径（默认根目录可省略）
-          push: true                # 开启推送
+          push: false                # 开启推送true
           tags: ${{ steps.gen_tags.outputs.tags }}  # 使用步骤6生成的标签
           platforms: linux/amd64,linux/arm64/v8  # 指定要构建的架构（AMD64 + ARM64） arm64/v8 是主流ARM架构（如树莓派4、云服务器ARM）
           # 可选：启用缓存，加速后续构建（推荐开启）
