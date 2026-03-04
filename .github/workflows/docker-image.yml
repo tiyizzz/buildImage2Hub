@@ -120,8 +120,8 @@ jobs:
           tags: ${{ steps.gen_tags.outputs.tags }}           # 使用步骤6生成的标签
           platforms: linux/amd64,linux/arm64/v8  # 指定要构建的架构（AMD64 + ARM64） arm64/v8 是主流ARM架构（如树莓派4、云服务器ARM）
           # 可选：启用缓存，加速后续构建（推荐开启）
-          cache-from: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/${{github.event.inputs.external_repo}}:buildcache
-          cache-to: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/${{github.event.inputs.external_repo}}:buildcache,mode=max
+          cache-from: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/drawdb:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_HUB_USERNAME }}/drawdb:buildcache,mode=max
           # 可选：如果Dockerfile有跨架构兼容问题，启用此选项
           # build-args: |
           #   ARCH=linux/arm64/v8
