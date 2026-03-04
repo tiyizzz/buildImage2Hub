@@ -1,5 +1,5 @@
 # 工作流名称
-name: Auto Build and Push Docker Image
+name: Auto Build Docker Image
 
 # 触发条件：推送到main分支、创建v开头的标签时触发
 on:
