@@ -13,7 +13,7 @@ RUN if [ -z "$VERSION" ]; then \
 
 # 3. 安装依赖
 # 使用 set -e 确保如果 apt 安装失败，构建立即停止
-RUN set -e && \
+RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources && \
     apt-get update && apt-get install -y --no-install-recommends \
     wget \
     curl \
