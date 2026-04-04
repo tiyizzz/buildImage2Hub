@@ -1,8 +1,14 @@
 FROM debian:bookworm-slim
 
-# 安装所有必须依赖：Qt + xvfb + xauth + 全部图形库
+ARG VERSION
+
+# 安装所有依赖：xvfb xauth + Qt + 系统库
 RUN apt update && apt install -y --no-install-recommends \
     wget \
+    curl \
+    ca-certificates \
+    xvfb \
+    xauth \
     libqt5core5a \
     libqt5gui5 \
     libqt5widgets5 \
@@ -13,25 +19,16 @@ RUN apt update && apt install -y --no-install-recommends \
     libmodbus-dev \
     libusb-1.0-0-dev \
     udev \
-    xvfb \
-    xauth \
-    x11-xkb-utils \
-    libx11-xcb1 \
-    libxcb-xinerama0 \
-    libxcb-randr0 \
-    libxcb-shape0 \
-    libxcb-sync1 \
-    libxcb-xfixes0 \
     && rm -rf /var/lib/apt/lists/*
 
-# 下载对应版本
-RUN wget -O /tmp/artisan.deb https://github.com/artisan-roaster-scope/artisan/releases/download/${VERSION}/artisan-linux-${VERSION#v}.deb \
-    && dpkg -i /tmp/artisan.deb || apt -f install -y \
-    && rm -rf /tmp/artisan.deb
+# 下载 + 安装（强制成功）
+RUN cd /tmp && \
+    wget -O artisan.deb https://github.com/artisan-roaster-scope/artisan/releases/download/${VERSION}/artisan-linux-${VERSION#v}.deb && \
+    dpkg -i artisan.deb || apt -f install -y && \
+    rm -f artisan.deb
 
-# 官方 Web 模式启动
-CMD ["artisan", "--web", "--web-host", "0.0.0.0", "--web-port", "8080"]
+# 测试是否安装成功（留痕）
+RUN which artisan || exit 1
 
-
-# 🔥 关键修复：用虚拟显示器启动，否则 Web 模式也会闪退
-CMD xvfb-run -a artisan --web --web-host 0.0.0.0 --web-port 8080
+# 启动命令（稳定版）
+CMD xvfb-run -a /usr/local/bin/artisan --web --web-host 0.0.0.0 --web-port 8080
