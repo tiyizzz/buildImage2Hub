@@ -48,22 +48,41 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ==========================================
-# 4. 暴力安装 (关键修改)
+# 4. 安装 Artisan
 # ==========================================
-# 1. 尝试用 apt-get 直接安装本地文件 (比 dpkg 更智能)
-# 2. 如果失败，强制运行 dpkg -i (忽略错误)
-# 3. 再次运行 apt-get -f install 修复依赖
-# 4. 删除 dpkg --configure -a (避免死循环报错)
 RUN apt-get install -y -f /tmp/artisan.deb || \
     (dpkg -i /tmp/artisan.deb && apt-get -f install -y) || \
     true && \
     rm -f /tmp/artisan.deb
 
 # ==========================================
-# 5. 验证
+# 5. 寻找文件 (关键修改)
 # ==========================================
-RUN if [ ! -f /usr/local/bin/artisan ]; then \
-      echo "❌ 安装失败：找不到二进制文件"; exit 1; \
+# 1. 列出 dpkg 安装的所有文件
+RUN echo "🔍 正在查询 dpkg 安装记录..." && \
+    dpkg -L artisan 2>/dev/null || echo "⚠️ dpkg 未记录 artisan 包"
+
+# 2. 全盘搜索 artisan 可执行文件
+RUN echo "🔍 正在全盘搜索 artisan 文件..." && \
+    find / -name "artisan*" -type f 2>/dev/null
+
+# 3. 尝试建立软链接 (如果找到了)
+# 假设它可能被安装在 /usr/bin/artisan 或 /opt/...
+RUN \
+    FOUND_PATH=$(find / -name "artisan" -type f 2>/dev/null | head -n 1) && \
+    if [ -n "$FOUND_PATH" ]; then \
+      echo "✅ 找到文件: $FOUND_PATH"; \
+      ln -sf "$FOUND_PATH" /usr/local/bin/artisan; \
+    else \
+      echo "❌ 未找到 artisan 可执行文件"; \
+      exit 1; \
+    fi
+
+# ==========================================
+# 6. 验证
+# ==========================================
+RUN if [ ! -L /usr/local/bin/artisan ] && [ ! -f /usr/local/bin/artisan ]; then \
+      echo "❌ 最终验证失败：链接或文件仍不存在"; exit 1; \
     fi
 
 CMD ["xvfb-run", "-a", "/usr/local/bin/artisan", "--web", "--web-host", "0.0.0.0", "--web-port", "8080"]
