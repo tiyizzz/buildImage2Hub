@@ -1,5 +1,5 @@
 # 工作流名称
-name: Auto Build Artisan Docker Latest
+name: Auto Build Artisan Docker
 
 # 触发条件：推送到main分支、创建v开头的标签时触发
 on:
