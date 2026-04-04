@@ -3,47 +3,38 @@ FROM debian:bookworm-slim
 ARG VERSION
 
 # ==========================================
-# 1. 基础环境准备
+# 1. 基础环境 & 源地址修复
 # ==========================================
 RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources && \
     echo "deb http://mirrors.aliyun.com/debian/ bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list && \
     echo "deb http://mirrors.aliyun.com/debian/ bookworm-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
     echo "deb http://mirrors.aliyun.com/debian-security bookworm-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
     apt-get update && apt-get install -y --no-install-recommends \
-    wget ca-certificates file && \
+    wget ca-certificates gnupg && \
     rm -rf /var/lib/apt/lists/*
 
 # ==========================================
-# 2. 下载 Artisan (带调试信息)
+# 2. 下载 Artisan
 # ==========================================
 RUN \
     STRIPPED_VERSION=${VERSION#v} && \
     DOWNLOAD_URL="https://github.com/artisan-roaster-scope/artisan/releases/download/${VERSION}/artisan-linux-${STRIPPED_VERSION}.deb" && \
     echo "📥 正在下载: ${DOWNLOAD_URL}" && \
-    # 下载文件
-    wget -O /tmp/artisan.deb "${DOWNLOAD_URL}" && \
-    # 🔍 关键调试步骤：检查文件
-    echo "🔍 正在检查下载的文件..." && \
-    ls -lh /tmp/artisan.deb && \
-    file /tmp/artisan.deb && \
-    # 检查文件大小，如果小于 1000 字节，说明下载的可能是一个 404 错误页面
-    FILE_SIZE=$(stat -c%s "/tmp/artisan.deb") && \
-    if [ "$FILE_SIZE" -lt 1000 ]; then \
-      echo "❌ 错误：文件太小，可能下载失败或是一个 HTML 错误页面！"; \
-      cat /tmp/artisan.deb; \
-      exit 1; \
-    fi && \
-    echo "✅ 文件检查通过，准备安装..."
+    wget -O /tmp/artisan.deb "${DOWNLOAD_URL}"
 
 # ==========================================
-# 3. 安装依赖
+# 3. 安装全量依赖 (关键修复)
 # ==========================================
+# 我们不仅安装 Qt5，还安装了 Python3、GStreamer 和 X11 相关库
+# 这样可以确保 dpkg 安装时所有依赖都已满足
 RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources && \
     echo "deb http://mirrors.aliyun.com/debian/ bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list && \
     echo "deb http://mirrors.aliyun.com/debian/ bookworm-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
     echo "deb http://mirrors.aliyun.com/debian-security bookworm-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
     apt-get update && apt-get install -y --no-install-recommends \
+    # 基础工具
     curl xvfb xauth \
+    # Qt5 核心
     libqt5core5a \
     libqt5gui5 \
     libqt5widgets5 \
@@ -51,15 +42,30 @@ RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources && \
     libqt5network5 \
     libqt5printsupport5 \
     libqt5svg5 \
+    libqt5multimedia5 \
+    libqt5multimedia5-plugins \
+    # Python 3 (Artisan 核心依赖)
+    python3 \
+    python3-pyqt5 \
+    python3-pyqt5.qtserialport \
+    python3-serial \
+    # GStreamer (多媒体/声音)
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    # 其他系统库
     libmodbus-dev \
     libusb-1.0-0-dev \
     udev \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # ==========================================
 # 4. 执行安装
 # ==========================================
-RUN dpkg -i /tmp/artisan.deb || (apt-get -f install -y && echo "✅ 依赖修复成功")
+# 此时依赖应该都装好了，dpkg 应该能直接成功
+RUN dpkg -i /tmp/artisan.deb || apt-get -f install -y && \
+    rm -f /tmp/artisan.deb
 
 # ==========================================
 # 5. 验证
