@@ -1,6 +1,6 @@
 FROM debian:bookworm-slim
 
-# 安装依赖（已修复，不使用 sed 替换镜像，避免报错）
+# 安装所有必须依赖：Qt + xvfb + xauth + 全部图形库
 RUN apt update && apt install -y --no-install-recommends \
     wget \
     libqt5core5a \
@@ -14,6 +14,14 @@ RUN apt update && apt install -y --no-install-recommends \
     libusb-1.0-0-dev \
     udev \
     xvfb \
+    xauth \
+    x11-xkb-utils \
+    libx11-xcb1 \
+    libxcb-xinerama0 \
+    libxcb-randr0 \
+    libxcb-shape0 \
+    libxcb-sync1 \
+    libxcb-xfixes0 \
     && rm -rf /var/lib/apt/lists/*
 
 # 下载对应版本
