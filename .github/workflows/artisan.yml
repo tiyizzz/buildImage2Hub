@@ -29,14 +29,22 @@ jobs:
           install: true  # 确保安装最新版Buildx，支持多架构
           
       - name: 获取 Artisan 最新 Release
-        id: latest
+        id: release
         uses: pozetroninc/github-action-get-latest-release@master
         with:
           repository: artisan-roaster-scope/artisan
           
       - name: 解析版本号
-        run: echo "VERSION=${{ steps.latest.outputs.release }}" >> $GITHUB_ENV
-  
+        run:  |
+          VERSION=${{ steps.release.outputs.release }}
+          echo "✅ 获取到最新版本：$VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          # 打印完整信息
+          echo "================================"
+          echo "📦 即将构建镜像版本：$VERSION"
+          echo "🖼  架构：linux/amd64,linux/arm64"
+          echo "🌐 模式：官方原生 Web"
+          echo "================================"
           
 
           
