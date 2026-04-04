@@ -1,14 +1,26 @@
 FROM debian:bookworm-slim
 
+# 1. 声明参数
 ARG VERSION
 
-# 安装所有依赖：xvfb xauth + Qt + 系统库
-RUN apt update && apt install -y --no-install-recommends \
+# 2. 参数校验 (防止传入 'latest' 或空值导致下载 404 页面)
+RUN if [ -z "$VERSION" ]; then \
+      echo "❌ ERROR: VERSION build-arg is missing!"; exit 1; \
+    fi && \
+    if [ "$VERSION" = "latest" ]; then \
+      echo "❌ ERROR: VERSION cannot be 'latest'. Please resolve it to a specific tag (e.g., v4.0.2) in GitHub Actions first."; exit 1; \
+    fi
+
+# 3. 安装依赖
+# 使用 set -e 确保如果 apt 安装失败，构建立即停止
+RUN set -e && \
+    apt-get update && apt-get install -y --no-install-recommends \
     wget \
     curl \
     ca-certificates \
     xvfb \
     xauth \
+    # Qt5 核心库
     libqt5core5a \
     libqt5gui5 \
     libqt5widgets5 \
@@ -16,19 +28,30 @@ RUN apt update && apt install -y --no-install-recommends \
     libqt5network5 \
     libqt5printsupport5 \
     libqt5svg5 \
+    # 其他依赖
     libmodbus-dev \
     libusb-1.0-0-dev \
     udev \
     && rm -rf /var/lib/apt/lists/*
 
-# 下载 + 安装（强制成功）
-RUN cd /tmp && \
-    wget -O artisan.deb https://github.com/artisan-roaster-scope/artisan/releases/download/${VERSION}/artisan-linux-${VERSION#v}.deb && \
-    dpkg -i artisan.deb || apt -f install -y && \
-    rm -f artisan.deb
+# 4. 下载与安装
+# 使用 set -e 确保下载失败时不继续执行 dpkg
+RUN set -e && \
+    # 去除版本号中的 'v' (例如 v4.0.2 -> 4.0.2)，以匹配文件名格式
+    # 注意：请确认 GitHub Release 的文件名是否真的不带 'v'
+    STRIPPED_VERSION=${VERSION#v} && \
+    echo "📥 Downloading Artisan version: $VERSION (File: $STRIPPED_VERSION)" && \
+    wget -O /tmp/artisan.deb "https://github.com/artisan-roaster-scope/artisan/releases/download/${VERSION}/artisan-linux-${STRIPPED_VERSION}.deb" && \
+    dpkg -i /tmp/artisan.deb || apt-get -f install -y && \
+    rm -f /tmp/artisan.deb
 
-# 测试是否安装成功（留痕）
-RUN which artisan || exit 1
+# 5. 验证安装
+# 检查二进制文件是否存在
+RUN if [ ! -f /usr/local/bin/artisan ]; then \
+      echo "❌ ERROR: Artisan binary not found! Installation failed."; exit 1; \
+    fi && \
+    echo "✅ Artisan installed successfully."
 
-# 启动命令（稳定版）
-CMD xvfb-run -a /usr/local/bin/artisan --web --web-host 0.0.0.0 --web-port 8080
+# 6. 启动命令
+# 使用 xvfb-run 模拟图形界面环境
+CMD ["xvfb-run", "-a", "/usr/local/bin/artisan", "--web", "--web-host", "0.0.0.0", "--web-port", "8080"]
