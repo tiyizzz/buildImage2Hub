@@ -5,50 +5,65 @@ ARG VERSION
 # ==========================================
 # 1. 修复源地址 & 安装基础工具
 # ==========================================
-# 这一步必须先成功，否则后面都没法跑
 RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources && \
     apt-get update && apt-get install -y --no-install-recommends \
-    wget ca-certificates && \
+    wget ca-certificates gnupg && \
     rm -rf /var/lib/apt/lists/*
 
 # ==========================================
-# 2. 调试与下载 (关键修改)
+# 2. 下载 Artisan
 # ==========================================
-# 我们不使用 set -e，而是手动检查每一步的返回值，并打印详细信息
 RUN \
-    # 1. 准备变量
     STRIPPED_VERSION=${VERSION#v} && \
     DOWNLOAD_URL="https://github.com/artisan-roaster-scope/artisan/releases/download/${VERSION}/artisan-linux-${STRIPPED_VERSION}.deb" && \
-    \
-    # 2. 打印调试信息 (在构建日志中能看到)
-    echo "=========================================" && \
-    echo "🔍 正在检查版本: ${VERSION}" && \
-    echo "🔗 尝试下载链接: ${DOWNLOAD_URL}" && \
-    echo "=========================================" && \
-    \
-    # 3. 尝试下载 (如果不加 -q，wget 会输出详细日志)
+    echo "📥 下载地址: ${DOWNLOAD_URL}" && \
     if wget -O /tmp/artisan.deb "${DOWNLOAD_URL}"; then \
-        echo "✅ 下载成功！"; \
+        echo "✅ 下载完成"; \
     else \
-        echo "❌ 下载失败！请检查版本号是否正确，或者文件名是否需要保留 'v'。"; \
-        exit 1; \
+        echo "❌ 下载失败"; exit 1; \
     fi
 
 # ==========================================
-# 3. 安装依赖 (在下载成功后再安装，节省时间)
+# 3. 安装依赖 (提前安装，防止 dpkg 报错)
 # ==========================================
+# Artisan 依赖大量的 Qt5 库，我们在这里显式地全部安装
 RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources && \
     apt-get update && apt-get install -y --no-install-recommends \
     curl xvfb xauth \
-    libqt5core5a libqt5gui5 libqt5widgets5 \
-    libqt5serialport5 libqt5network5 libqt5printsupport5 libqt5svg5 \
-    libmodbus-dev libusb-1.0-0-dev udev \
+    libqt5core5a \
+    libqt5gui5 \
+    libqt5widgets5 \
+    libqt5serialport5 \
+    libqt5network5 \
+    libqt5printsupport5 \
+    libqt5svg5 \
+    libmodbus-dev \
+    libusb-1.0-0-dev \
+    udev \
     && rm -rf /var/lib/apt/lists/*
 
 # ==========================================
-# 4. 安装 Artisan
+# 4. 执行安装 (带详细报错)
 # ==========================================
-RUN dpkg -i /tmp/artisan.deb || apt-get -f install -y && \
+# 我们不再使用 set -e，而是手动检查每一步
+RUN \
+    echo "🔨 正在执行 dpkg -i..." && \
+    if dpkg -i /tmp/artisan.deb; then \
+        echo "✅ dpkg 安装成功"; \
+    else \
+        echo "⚠️ dpkg 安装遇到非致命错误，尝试自动修复依赖..."; \
+        # 关键：这里再次运行 update 确保 apt 能连上网
+        sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources && \
+        apt-get update && \
+        if apt-get -f install -y; then \
+            echo "✅ 依赖修复成功"; \
+        else \
+            echo "❌ 致命错误：依赖修复失败！"; \
+            # 打印具体的错误日志，方便调试
+            dpkg -l | grep -v "ii" || true; \
+            exit 1; \
+        fi; \
+    fi && \
     rm -f /tmp/artisan.deb
 
 # ==========================================
