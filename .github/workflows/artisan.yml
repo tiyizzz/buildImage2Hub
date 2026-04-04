@@ -7,6 +7,7 @@ on:
   #   branches: [ "main" ]  # 替换为你的主分支（如master）
   #   tags: [ 'v*' ]        # 标签以v开头时触发（如v1.0.0）
   # 可选：手动触发（方便测试）
+  workflow_dispatch:  # 仅手动触发
 # 定义任务
 jobs:
   build-and-push:
