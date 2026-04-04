@@ -3,9 +3,13 @@ FROM debian:bookworm-slim
 ARG VERSION
 
 # ==========================================
-# 1. 修复源地址 & 安装基础工具
+# 1. 基础环境准备 & 源地址修复 (最终方案)
 # ==========================================
-RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources && \
+# 我们不使用 sed 修改，而是直接用 cat 覆盖整个文件，确保万无一失
+RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources && \
+    echo "deb http://mirrors.aliyun.com/debian/ bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list && \
+    echo "deb http://mirrors.aliyun.com/debian/ bookworm-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
+    echo "deb http://mirrors.aliyun.com/debian-security bookworm-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
     apt-get update && apt-get install -y --no-install-recommends \
     wget ca-certificates && \
     rm -rf /var/lib/apt/lists/*
@@ -17,22 +21,44 @@ RUN \
     STRIPPED_VERSION=${VERSION#v} && \
     DOWNLOAD_URL="https://github.com/artisan-roaster-scope/artisan/releases/download/${VERSION}/artisan-linux-${STRIPPED_VERSION}.deb" && \
     echo "📥 正在下载: ${DOWNLOAD_URL}" && \
-    wget -q --show-progress -O /tmp/artisan.deb "${DOWNLOAD_URL}"
+    if wget -q --show-progress -O /tmp/artisan.deb "${DOWNLOAD_URL}"; then \
+        echo "✅ 下载成功"; \
+    else \
+        echo "❌ 下载失败"; exit 1; \
+    fi
 
 # ==========================================
-# 3. 强制安装 (关键修复点)
+# 3. 安装依赖
 # ==========================================
-# 先更新源（确保修复依赖时能上网），然后尝试安装，不管 dpkg 成功与否，都运行 apt-get -f install
-RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources && \
-    apt-get update && \
-    # 关键：使用 || true 确保即使 dpkg 失败，构建也不会在这里中断
-    dpkg -i /tmp/artisan.deb || true && \
-    # 强制运行 apt-get -f install 来修复依赖并完成安装
+# 再次确保源配置正确，然后安装 Artisan 所需的所有依赖
+RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources && \
+    echo "deb http://mirrors.aliyun.com/debian/ bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list && \
+    echo "deb http://mirrors.aliyun.com/debian/ bookworm-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
+    echo "deb http://mirrors.aliyun.com/debian-security bookworm-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
+    apt-get update && apt-get install -y --no-install-recommends \
+    curl xvfb xauth \
+    libqt5core5a \
+    libqt5gui5 \
+    libqt5widgets5 \
+    libqt5serialport5 \
+    libqt5network5 \
+    libqt5printsupport5 \
+    libqt5svg5 \
+    libmodbus-dev \
+    libusb-1.0-0-dev \
+    udev \
+    && rm -rf /var/lib/apt/lists/*
+
+# ==========================================
+# 4. 执行安装
+# ==========================================
+# 使用 || true 确保即使 dpkg 失败，构建也能继续
+RUN dpkg -i /tmp/artisan.deb || true && \
     apt-get -f install -y && \
     rm -f /tmp/artisan.deb
 
 # ==========================================
-# 4. 验证
+# 5. 验证
 # ==========================================
 RUN if [ ! -f /usr/local/bin/artisan ]; then \
       echo "❌ 安装失败：找不到二进制文件"; exit 1; \
