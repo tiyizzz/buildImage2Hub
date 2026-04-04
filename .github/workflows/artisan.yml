@@ -19,7 +19,15 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
-        
+      # 步骤3：设置 QEMU（多架构构建需要）
+      - name: 设置 QEMU
+        uses: docker/setup-qemu-action@v3     
+      # 步骤4：设置Docker Buildx（增强构建能力，支持多平台）
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          install: true  # 确保安装最新版Buildx，支持多架构
+          
       - name: 获取 Artisan 最新 Release
         id: latest
         uses: pozetroninc/github-action-get-latest-release@master
@@ -30,15 +38,7 @@ jobs:
         run: echo "VERSION=${{ steps.latest.outputs.release }}" >> $GITHUB_ENV
   
           
-     # 步骤3：设置 QEMU（多架构构建需要）
-      - name: 设置 QEMU
-        uses: docker/setup-qemu-action@v3     
-        
-      # 步骤4：设置Docker Buildx（增强构建能力，支持多平台）
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          install: true  # 确保安装最新版Buildx，支持多架构
+
           
       # 步骤5：登录Docker Hub（使用配置的密钥）
       - name: 登录 Docker Hub
