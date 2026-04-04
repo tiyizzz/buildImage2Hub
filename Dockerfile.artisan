@@ -6,9 +6,12 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    # 基础工具
     wget \
     supervisor \
+    # AppImage 运行核心依赖 (必须)
     libfuse2 \
+    # 图形界面基础库
     libglib2.0-0 \
     libgl1-mesa-glx \
     libx11-6 \
@@ -17,10 +20,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxfixes3 \
     libxi6 \
     libxxf86vm1 \
-    xvfb \
-    x11vnc \
-    novnc \
-    websockify \
+    # 浏览器访问核心组件
+    xvfb \        # 虚拟显示器
+    x11vnc \      # VNC 服务端
+    novnc \       # Web VNC 客户端
+    websockify \  # WebSocket 代理 (用于启动 noVNC)
+    # Artisan 自身依赖
     python3 \
     python3-pyqt5 \
     python3-serial \
@@ -33,7 +38,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ARG VERSION=v4.0.2
 ENV ARTISAN_URL="https://github.com/artisan-roaster-scope/artisan/releases/download/${VERSION}/artisan-linux-${VERSION#v}.AppImage"
 
-# 修正点：这里只下载并赋予权限，绝对不进行解压操作
 RUN cd /tmp && \
     wget -O /tmp/artisan.AppImage "${ARTISAN_URL}" && \
     chmod +x /tmp/artisan.AppImage
@@ -61,17 +65,19 @@ autorestart=true
 priority=200
 depends_on=xvfb
 
-# 3. 启动 noVNC (将 VNC 转为 Web，监听 6080 端口)
+# 3. 启动 noVNC (修正后的命令)
+# 使用 websockify 将 VNC 端口 (5900) 映射到 Web 端口 (6080)
 [program:novnc]
-command=/usr/share/novnc/utils/novnc_proxy --vnc localhost:5900 --listen 6080
+command=/usr/bin/websockify --web=/usr/share/novnc/ 6080 localhost:5900
 autorestart=true
 priority=300
 depends_on=x11vnc
 
-# 4. 启动 Artisan (直接运行 AppImage)
+# 4. 启动 Artisan (修正环境变量的命令)
+# 设置 PYTHONPATH，确保 AppImage 能找到其内部的 Python 库
 [program:artisan]
 command=/tmp/artisan.AppImage
-environment=DISPLAY=":99"
+environment=DISPLAY=":99",PYTHONPATH="/usr/lib/python3.10:/usr/lib/python3"
 autorestart=true
 priority=400
 depends_on=xvfb
