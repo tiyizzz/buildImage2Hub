@@ -1,10 +1,6 @@
 FROM debian:bookworm-slim
 
-# 国内镜像加速
-RUN sed -i "s@deb.debian.org@mirrors.tuna.tsinghua.edu.cn@g" /etc/apt/sources.list && \
-    sed -i "s@security.debian.org@mirrors.tuna.tsinghua.edu.cn@g" /etc/apt/sources.list
-
-# 安装依赖
+# 安装依赖（已修复，不使用 sed 替换镜像，避免报错）
 RUN apt update && apt install -y --no-install-recommends \
     wget \
     libqt5core5a \
@@ -19,10 +15,10 @@ RUN apt update && apt install -y --no-install-recommends \
     udev \
     && rm -rf /var/lib/apt/lists/*
 
-# 自动下载最新版
-RUN wget -q https://github.com/artisan-roaster-scope/artisan/releases/latest/download/artisan-linux.deb -O /tmp/artisan.deb && \
-    dpkg -i /tmp/artisan.deb || apt -f install -y && \
-    rm -f /tmp/artisan.deb
+# 安装最新版 Artisan
+RUN wget https://github.com/artisan-roaster-scope/artisan/releases/latest/download/artisan-linux.deb -O /tmp/artisan.deb \
+    && dpkg -i /tmp/artisan.deb || apt -f install -y \
+    && rm -f /tmp/artisan.deb
 
-# Web 启动
+# 官方 Web 模式启动
 CMD ["artisan", "--web", "--web-host", "0.0.0.0", "--web-port", "8080"]
