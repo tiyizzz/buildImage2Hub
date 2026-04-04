@@ -13,6 +13,7 @@ RUN apt update && apt install -y --no-install-recommends \
     libmodbus-dev \
     libusb-1.0-0-dev \
     udev \
+    xvfb \
     && rm -rf /var/lib/apt/lists/*
 
 # 下载对应版本
