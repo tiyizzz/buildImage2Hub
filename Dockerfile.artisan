@@ -3,59 +3,44 @@ FROM ubuntu:22.04
 # ==========================================
 # 1. 环境准备与依赖安装
 # ==========================================
-# 安装 Artisan 运行所需的核心库
-# 注意：AppImage 虽然自带库，但底层系统库（如 glibc, fuse）和 Qt 插件仍需系统提供
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
-    libfuse2 \          # AppImage 运行的基础 (虽然我们解压了，但部分逻辑可能仍需引用)
+    libfuse2 \
     libglib2.0-0 \
-    libgl1-mesa-glx \   # 图形渲染
-    libx11-6 \          # X11 显示支持
+    libgl1-mesa-glx \
+    libx11-6 \
     libxext6 \
     libxrender1 \
     libxfixes3 \
     libxi6 \
     libxxf86vm1 \
-    python3 \           # Artisan 是 Python 写的，底层依赖
-    python3-pyqt5 \     # Qt5 库 (AppImage 可能自带，但系统装一份最保险)
-    python3-serial \    # 串口支持
+    python3 \
+    python3-pyqt5 \
+    python3-serial \
     python3-requests \
     && rm -rf /var/lib/apt/lists/*
 
 # ==========================================
 # 2. 下载与解压 AppImage
 # ==========================================
-# 设置版本参数 (方便以后升级)
 ARG VERSION=v4.0.2
 ENV ARTISAN_URL="https://github.com/artisan-roaster-scope/artisan/releases/download/${VERSION}/artisan-linux-${VERSION#v}.AppImage"
 
 RUN cd /tmp && \
-    # 下载
     wget -O artisan.AppImage "${ARTISAN_URL}" && \
-    # 赋予执行权限
     chmod +x artisan.AppImage && \
-    # 【暴力解压】核心步骤：使用 --appimage-extract
-    # 这会生成 squashfs-root 目录
     ./artisan.AppImage --appimage-extract && \
-    # 将解压出来的文件夹移动到标准位置
     mv /tmp/squashfs-root /opt/artisan && \
-    # 清理下载包
     rm artisan.AppImage
 
 # ==========================================
 # 3. 配置与启动
 # ==========================================
-# 设置工作目录为解压出来的程序目录
 WORKDIR /opt/artisan
 
-# 创建软链接，方便调用 (可选)
 RUN ln -sf /opt/artisan/AppRun /usr/local/bin/artisan
 
 # ==========================================
 # 4. 启动命令
 # ==========================================
-# Artisan 支持命令行参数启动 Web 服务
-# --web: 启用 Web 模式
-# --web-host: 绑定到 0.0.0.0 (容器内必须是 0.0.0.0，不能是 127.0.0.1)
-# --web-port: 端口
 CMD ["./AppRun", "--web", "--web-host", "0.0.0.0", "--web-port", "8080"]
