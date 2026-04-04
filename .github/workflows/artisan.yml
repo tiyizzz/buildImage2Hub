@@ -7,44 +7,6 @@ on:
   #   branches: [ "main" ]  # 替换为你的主分支（如master）
   #   tags: [ 'v*' ]        # 标签以v开头时触发（如v1.0.0）
   # 可选：手动触发（方便测试）
-  workflow_dispatch:
-    inputs:
-      # 外部仓库用户名/外部仓库名 例如：drawdb-io/drawdb
-      external_repo:
-        description: '外部公共仓库地址（格式：用户名/仓库名）'
-        required: true
-        default: 'drawdb-io/drawdb' # 替换为你的目标仓库
-      # 要拉取的分支（如 main、dev）
-      target_tag:
-        description: '要拉取的仓库 Tag（如 v1.0.0）'
-        required: true
-        default: 'v1.5.0' # 替换为你要的 Tag
-      # 选择架构（多选用英文逗号分隔）
-      build_platforms:
-        type: choice
-        description: '选择构建架构（多选组合）'
-        required: true
-        options:
-          - linux/amd64（仅x86）
-          - linux/arm64/v8（仅ARM64）
-          - linux/arm/v7（仅ARMv7/树莓派）
-          - linux/amd64,linux/arm64/v8（x86+ARM64）
-          - linux/amd64,linux/arm64/v8,linux/arm/v7（全架构）
-        default: 'linux/amd64,linux/arm64/v8（x86+ARM64）'
-      # 是否推送镜像到Docker Hub
-      isPush:
-        type: choice
-        description: '是否推送镜像到Docker Hub'
-        options:
-          - true
-          - false
-        required: true
-        default: 'false'
-      # Dockerfile路径
-      dockerfile_path:
-        description: 'Dockerfile路径（外部代码在./app目录下）'
-        required: true
-        default: './app/Dockerfile' # 替换为你的目标仓库
 # 定义任务
 jobs:
   build-and-push:
@@ -84,65 +46,14 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-      # 步骤6：生成镜像标签（区分分支/标签）
-      - name: Define image tags
-        id: gen_tags
-        run: |
-          # 镜像仓库地址（替换为你的Docker Hub仓库名）
-          # 第一步：获取外部仓库地址（输入参数）
-          EXTERNAL_REPO="${{ github.event.inputs.external_repo }}"
-          echo "原始外部仓库地址：$EXTERNAL_REPO"
-          # 第二步：通用截取逻辑（适配所有格式）
-          # 1. 去掉 URL 协议/域名/后缀（如 .git）
-          # 2. 按 / 分割，取最后一段作为仓库名
-          REPO_NAME=$(echo "$EXTERNAL_REPO" | \
-            sed -e 's|^https://github.com/||' \
-                -e 's|^git@github.com:||' \
-                -e 's|.git$||' \
-                -e 's|.git/||' | \
-            awk -F '/' '{print $NF}')
-          # 输出截取结果（方便调试）
-          echo "截取的仓库名：$REPO_NAME"
-          
-          # 第三步：拼接合法的镜像标签（必填：你的 Docker Hub 用户名）
-          DOCKER_USERNAME="你的DockerHub用户名" # 替换为你的实际用户名！
-          IMAGE_REPO="${{ secrets.DOCKER_HUB_USERNAME}}/${REPO_NAME}"
-          TARGET_TAG="${{ github.event.inputs.target_tag }}"
-
-          # 生成最终标签（格式：用户名/仓库名:latest、用户名/仓库名:v1.5.0）
-          # TAGS="${IMAGE_REPO}:latest,${IMAGE_REPO}:${TARGET_TAG}"
-          TAGS="${IMAGE_REPO}:${TARGET_TAG}"
-
-          echo "最终镜像标签：$TAGS"
-
-          # 传递标签到下一步
-          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
-          # 传递仓库名（可选，后续可复用）
-          echo "repo_name=${REPO_NAME}" >> $GITHUB_OUTPUT
-          # 新增：传递完整镜像前缀
-          echo "image_repo=${IMAGE_REPO}" >> $GITHUB_OUTPUT
-          
-      # 步骤7：解析选择的架构（去掉括号说明，只保留架构值）
-      - name: Parse build platforms
-        id: parse_platforms
-        run: |
-          # 去掉选择项中的括号和说明文字，只保留架构值
-          PLATFORMS=$(echo "${{ github.event.inputs.build_platforms }}" | sed -e 's/（.*）//g')
-          echo "最终构建架构：$PLATFORMS"
-          echo "platforms=$PLATFORMS" >> $GITHUB_OUTPUT
-          
-      # 步骤8：构建并推送多架构镜像
-      - name: Build and push multi-arch image
+      # 多架构构建并推送
+      - name: 构建并推送
         uses: docker/build-push-action@v5
         with:
-          context: ./app                                     # 指向外部代码存放目录
-          file: ${{ github.event.inputs.dockerfile_path }}   # 指定 Dockerfile 的完整路径
-          push: ${{ github.event.inputs.isPush == 'true' }}  # 开启推送true  布尔值判断（避免字符串解析问题）
-          tags: ${{ steps.gen_tags.outputs.tags }}           # 使用步骤6生成的标签
-          platforms: ${{ steps.parse_platforms.outputs.platforms }} # 使用解析后的架构 
-          # 可选：启用缓存，加速后续构建（推荐开启）
-          cache-from: type=registry,ref=${{ steps.gen_tags.outputs.image_repo }}:buildcache
-          cache-to: type=registry,ref=${{ steps.gen_tags.outputs.image_repo }}:buildcache,mode=max
-          # 可选：如果Dockerfile有跨架构兼容问题，启用此选项
-          # build-args: |
-          #   ARCH=linux/arm64/v8
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_HUB_USERNAME }}/artisan-web:latest
+            ${{ secrets.DOCKER_HUB_USERNAME }}/artisan-web:${{ env.VERSION }}
