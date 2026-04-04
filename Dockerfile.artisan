@@ -28,12 +28,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ==========================================
-# 2. 下载 AppImage
+# 2. 下载 AppImage (仅下载，不解压)
 # ==========================================
 ARG VERSION=v4.0.2
 ENV ARTISAN_URL="https://github.com/artisan-roaster-scope/artisan/releases/download/${VERSION}/artisan-linux-${VERSION#v}.AppImage"
 
-# 只做下载，不做解压，避免报错
+# 修正点：这里只下载并赋予权限，绝对不进行解压操作
 RUN cd /tmp && \
     wget -O /tmp/artisan.AppImage "${ARTISAN_URL}" && \
     chmod +x /tmp/artisan.AppImage
@@ -44,7 +44,6 @@ RUN cd /tmp && \
 RUN mkdir -p /etc/supervisor/conf.d/
 
 # 编写 supervisor 配置文件
-# 顺序：启动虚拟屏 -> 启动 VNC -> 启动 noVNC -> 启动 Artisan
 COPY <<EOF /etc/supervisor/conf.d/supervisord.conf
 [supervisord]
 nodaemon=true
