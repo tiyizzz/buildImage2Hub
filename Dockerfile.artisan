@@ -3,9 +3,12 @@ FROM ubuntu:22.04
 # ==========================================
 # 1. 环境准备与依赖安装
 # ==========================================
+# 关键修改：加入了 squashfs-tools (提供 unsquashfs 命令) 和 libfuse2
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
+    ca-certificates \
     libfuse2 \
+    squashfs-tools \
     libglib2.0-0 \
     libgl1-mesa-glx \
     libx11-6 \
@@ -21,26 +24,38 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ==========================================
-# 2. 下载与解压 AppImage
+# 2. 下载 AppImage
 # ==========================================
 ARG VERSION=v4.0.2
 ENV ARTISAN_URL="https://github.com/artisan-roaster-scope/artisan/releases/download/${VERSION}/artisan-linux-${VERSION#v}.AppImage"
 
 RUN cd /tmp && \
+    echo "📥 正在下载 AppImage..." && \
     wget -O artisan.AppImage "${ARTISAN_URL}" && \
-    chmod +x artisan.AppImage && \
-    ./artisan.AppImage --appimage-extract && \
-    mv /tmp/squashfs-root /opt/artisan && \
-    rm artisan.AppImage
+    chmod +x artisan.AppImage
 
 # ==========================================
-# 3. 配置与启动
+# 3. 手动暴力解压 (关键修改)
+# ==========================================
+# 我们不再运行 ./artisan.AppImage --appimage-extract
+# 而是直接使用 unsquashfs 命令解压内部的 squashfs 文件系统
+RUN cd /tmp && \
+    echo "🔨 正在手动解压..." && \
+    # 解压到 /opt/artisan 目录
+    unsquashfs -d /opt/artisan artisan.AppImage && \
+    # 清理下载包
+    rm artisan.AppImage && \
+    echo "✅ 解压完成"
+
+# ==========================================
+# 4. 配置与启动
 # ==========================================
 WORKDIR /opt/artisan
 
+# 建立软链接
 RUN ln -sf /opt/artisan/AppRun /usr/local/bin/artisan
 
 # ==========================================
-# 4. 启动命令
+# 5. 启动命令
 # ==========================================
 CMD ["./AppRun", "--web", "--web-host", "0.0.0.0", "--web-port", "8080"]
