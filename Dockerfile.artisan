@@ -3,28 +3,37 @@ FROM debian:bookworm-slim
 ARG VERSION
 
 # ==========================================
-# 1. 基础环境准备 & 源地址修复
+# 1. 基础环境准备
 # ==========================================
 RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources && \
     echo "deb http://mirrors.aliyun.com/debian/ bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list && \
     echo "deb http://mirrors.aliyun.com/debian/ bookworm-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
     echo "deb http://mirrors.aliyun.com/debian-security bookworm-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
     apt-get update && apt-get install -y --no-install-recommends \
-    wget ca-certificates && \
+    wget ca-certificates file && \
     rm -rf /var/lib/apt/lists/*
 
 # ==========================================
-# 2. 下载 Artisan
+# 2. 下载 Artisan (带调试信息)
 # ==========================================
 RUN \
     STRIPPED_VERSION=${VERSION#v} && \
     DOWNLOAD_URL="https://github.com/artisan-roaster-scope/artisan/releases/download/${VERSION}/artisan-linux-${STRIPPED_VERSION}.deb" && \
     echo "📥 正在下载: ${DOWNLOAD_URL}" && \
-    if wget -q --show-progress -O /tmp/artisan.deb "${DOWNLOAD_URL}"; then \
-        echo "✅ 下载成功"; \
-    else \
-        echo "❌ 下载失败"; exit 1; \
-    fi
+    # 下载文件
+    wget -O /tmp/artisan.deb "${DOWNLOAD_URL}" && \
+    # 🔍 关键调试步骤：检查文件
+    echo "🔍 正在检查下载的文件..." && \
+    ls -lh /tmp/artisan.deb && \
+    file /tmp/artisan.deb && \
+    # 检查文件大小，如果小于 1000 字节，说明下载的可能是一个 404 错误页面
+    FILE_SIZE=$(stat -c%s "/tmp/artisan.deb") && \
+    if [ "$FILE_SIZE" -lt 1000 ]; then \
+      echo "❌ 错误：文件太小，可能下载失败或是一个 HTML 错误页面！"; \
+      cat /tmp/artisan.deb; \
+      exit 1; \
+    fi && \
+    echo "✅ 文件检查通过，准备安装..."
 
 # ==========================================
 # 3. 安装依赖
@@ -48,16 +57,9 @@ RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources && \
     && rm -rf /var/lib/apt/lists/*
 
 # ==========================================
-# 4. 执行安装 (调试版)
+# 4. 执行安装
 # ==========================================
-# 第一步：运行 dpkg，不使用 || true，让它直接报错
-RUN dpkg -i /tmp/artisan.deb
-
-# 第二步：尝试修复依赖，并开启详细调试日志
-# 如果这一步失败，日志会告诉我们具体是哪个包出了问题
-RUN apt-get update && \
-    apt-get -o Debug::pkgProblemResolver=true -f install -y && \
-    rm -f /tmp/artisan.deb
+RUN dpkg -i /tmp/artisan.deb || (apt-get -f install -y && echo "✅ 依赖修复成功")
 
 # ==========================================
 # 5. 验证
