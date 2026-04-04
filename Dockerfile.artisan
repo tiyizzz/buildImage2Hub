@@ -1,18 +1,13 @@
 FROM debian:bookworm-slim
 
-# 1. 声明参数
+# 接收 GitHub Actions 传入的版本号
 ARG VERSION
 
-# 2. 参数校验 (防止传入 'latest' 或空值导致下载 404 页面)
-RUN if [ -z "$VERSION" ]; then \
-      echo "❌ ERROR: VERSION build-arg is missing!"; exit 1; \
-    fi && \
-    if [ "$VERSION" = "latest" ]; then \
-      echo "❌ ERROR: VERSION cannot be 'latest'. Please resolve it to a specific tag (e.g., v4.0.2) in GitHub Actions first."; exit 1; \
-    fi
-
-# 3. 安装依赖
-# 使用 set -e 确保如果 apt 安装失败，构建立即停止
+# ==========================================
+# 1. 修复源地址 & 安装依赖
+# ==========================================
+# 关键点：Debian Bookworm 必须更新 sources.list，否则 apt update 会报 exit code 100
+# 这里我们将源替换为阿里云镜像，速度更快且稳定
 RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources && \
     apt-get update && apt-get install -y --no-install-recommends \
     wget \
@@ -34,24 +29,31 @@ RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/source
     udev \
     && rm -rf /var/lib/apt/lists/*
 
-# 4. 下载与安装
-# 使用 set -e 确保下载失败时不继续执行 dpkg
+# ==========================================
+# 2. 下载与安装 Artisan
+# ==========================================
+# 使用 set -e 确保如果下载失败，构建立即停止
 RUN set -e && \
-    # 去除版本号中的 'v' (例如 v4.0.2 -> 4.0.2)，以匹配文件名格式
-    # 注意：请确认 GitHub Release 的文件名是否真的不带 'v'
+    # 去除版本号中的 'v' (例如 v4.0.2 -> 4.0.2)
     STRIPPED_VERSION=${VERSION#v} && \
     echo "📥 Downloading Artisan version: $VERSION (File: $STRIPPED_VERSION)" && \
-    wget -O /tmp/artisan.deb "https://github.com/artisan-roaster-scope/artisan/releases/download/${VERSION}/artisan-linux-${STRIPPED_VERSION}.deb" && \
+    # 下载 .deb 包，增加 --tries=3 防止网络波动
+    wget --tries=3 -O /tmp/artisan.deb "https://github.com/artisan-roaster-scope/artisan/releases/download/${VERSION}/artisan-linux-${STRIPPED_VERSION}.deb" && \
+    # 安装 .deb 包，如果依赖缺失则自动修复
     dpkg -i /tmp/artisan.deb || apt-get -f install -y && \
+    # 清理安装包
     rm -f /tmp/artisan.deb
 
-# 5. 验证安装
-# 检查二进制文件是否存在
+# ==========================================
+# 3. 验证安装
+# ==========================================
 RUN if [ ! -f /usr/local/bin/artisan ]; then \
-      echo "❌ ERROR: Artisan binary not found! Installation failed."; exit 1; \
+      echo "❌ ERROR: Artisan binary not found!"; exit 1; \
     fi && \
     echo "✅ Artisan installed successfully."
 
-# 6. 启动命令
-# 使用 xvfb-run 模拟图形界面环境
+# ==========================================
+# 4. 启动命令
+# ==========================================
+# 使用 xvfb-run 模拟图形界面环境，并启动 Web 服务
 CMD ["xvfb-run", "-a", "/usr/local/bin/artisan", "--web", "--web-host", "0.0.0.0", "--web-port", "8080"]
