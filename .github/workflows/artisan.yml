@@ -85,6 +85,8 @@ jobs:
           file: Dockerfile.artisan  # 这里写你自定义的Dockerfile名称
           platforms: linux/amd64,linux/arm64
           push: true
+          build-args: |
+            VERSION=${{ env.VERSION }}
           tags: |
             ${{ secrets.DOCKER_HUB_USERNAME }}/artisan-web:latest
             ${{ secrets.DOCKER_HUB_USERNAME }}/artisan-web:${{ env.VERSION }}
