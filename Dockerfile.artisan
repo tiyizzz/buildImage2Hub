@@ -3,9 +3,8 @@ FROM debian:bookworm-slim
 ARG VERSION
 
 # ==========================================
-# 1. 基础环境准备 & 源地址修复 (最终方案)
+# 1. 基础环境准备 & 源地址修复
 # ==========================================
-# 我们不使用 sed 修改，而是直接用 cat 覆盖整个文件，确保万无一失
 RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources && \
     echo "deb http://mirrors.aliyun.com/debian/ bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list && \
     echo "deb http://mirrors.aliyun.com/debian/ bookworm-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
@@ -30,7 +29,6 @@ RUN \
 # ==========================================
 # 3. 安装依赖
 # ==========================================
-# 再次确保源配置正确，然后安装 Artisan 所需的所有依赖
 RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources && \
     echo "deb http://mirrors.aliyun.com/debian/ bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list && \
     echo "deb http://mirrors.aliyun.com/debian/ bookworm-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list && \
@@ -50,11 +48,15 @@ RUN rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources && \
     && rm -rf /var/lib/apt/lists/*
 
 # ==========================================
-# 4. 执行安装
+# 4. 执行安装 (调试版)
 # ==========================================
-# 使用 || true 确保即使 dpkg 失败，构建也能继续
-RUN dpkg -i /tmp/artisan.deb || true && \
-    apt-get -f install -y && \
+# 第一步：运行 dpkg，不使用 || true，让它直接报错
+RUN dpkg -i /tmp/artisan.deb
+
+# 第二步：尝试修复依赖，并开启详细调试日志
+# 如果这一步失败，日志会告诉我们具体是哪个包出了问题
+RUN apt-get update && \
+    apt-get -o Debug::pkgProblemResolver=true -f install -y && \
     rm -f /tmp/artisan.deb
 
 # ==========================================
