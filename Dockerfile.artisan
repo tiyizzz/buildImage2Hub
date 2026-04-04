@@ -22,3 +22,7 @@ RUN wget -O /tmp/artisan.deb https://github.com/artisan-roaster-scope/artisan/re
 
 # 官方 Web 模式启动
 CMD ["artisan", "--web", "--web-host", "0.0.0.0", "--web-port", "8080"]
+
+
+# 🔥 关键修复：用虚拟显示器启动，否则 Web 模式也会闪退
+CMD xvfb-run -a artisan --web --web-host 0.0.0.0 --web-port 8080
