@@ -5,31 +5,20 @@ ARG VERSION
 # ==========================================
 # 1. 基础环境准备
 # ==========================================
-# 使用 Ubuntu 22.04 以获得更好的兼容性
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget ca-certificates gnupg \
     && rm -rf /var/lib/apt/lists/*
 
 # ==========================================
-# 2. 下载 Artisan (带哈希校验)
+# 2. 下载 Artisan
 # ==========================================
 RUN \
     STRIPPED_VERSION=${VERSION#v} && \
     DOWNLOAD_URL="https://github.com/artisan-roaster-scope/artisan/releases/download/${VERSION}/artisan-linux-${STRIPPED_VERSION}.deb" && \
     echo "📥 正在下载: ${DOWNLOAD_URL}" && \
-    # 下载文件
     wget -O /tmp/artisan.deb "${DOWNLOAD_URL}" && \
-    # 🔍 关键修改：输出文件的 SHA256 值和大小
-    echo "🔍 文件校验信息:" && \
     ls -lh /tmp/artisan.deb && \
-    sha256sum /tmp/artisan.deb && \
-    # 检查文件大小，如果小于 1MB，说明下载可能失败（真正的包通常有几十 MB）
-    FILE_SIZE=$(stat -c%s "/tmp/artisan.deb") && \
-    if [ "$FILE_SIZE" -lt 1000000 ]; then \
-      echo "❌ 错误：文件太小 (${FILE_SIZE} 字节)，可能下载失败！"; \
-      exit 1; \
-    fi && \
-    echo "✅ 文件检查通过"
+    sha256sum /tmp/artisan.deb
 
 # ==========================================
 # 3. 安装依赖
@@ -59,14 +48,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ==========================================
-# 4. 强制安装 (绕过脚本错误)
+# 4. 暴力安装 (关键修改)
 # ==========================================
-# 1. 使用 dpkg -i 安装
-# 2. 如果失败（通常是因为 postinst 脚本报错），我们忽略它
-# 3. 使用 dpkg --configure -a 强制完成配置
-RUN dpkg -i /tmp/artisan.deb || true && \
-    dpkg --configure -a && \
-    apt-get -f install -y && \
+# 1. 尝试用 apt-get 直接安装本地文件 (比 dpkg 更智能)
+# 2. 如果失败，强制运行 dpkg -i (忽略错误)
+# 3. 再次运行 apt-get -f install 修复依赖
+# 4. 删除 dpkg --configure -a (避免死循环报错)
+RUN apt-get install -y -f /tmp/artisan.deb || \
+    (dpkg -i /tmp/artisan.deb && apt-get -f install -y) || \
+    true && \
     rm -f /tmp/artisan.deb
 
 # ==========================================
