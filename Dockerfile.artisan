@@ -15,10 +15,10 @@ RUN apt update && apt install -y --no-install-recommends \
     udev \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 Artisan
-RUN wget https://github.com/artisan-roaster-scope/artisan/releases/download/${VERSION}/artisan-linux-${VERSION:1}.deb -O /tmp/artisan.deb \
-  && dpkg -i /tmp/artisan.deb || apt -f install -y \
-  && rm -rf /tmp/artisan.deb
+# 下载对应版本
+RUN wget -O /tmp/artisan.deb https://github.com/artisan-roaster-scope/artisan/releases/download/${VERSION}/artisan-linux-${VERSION#v}.deb \
+    && dpkg -i /tmp/artisan.deb || apt -f install -y \
+    && rm -rf /tmp/artisan.deb
 
 # 官方 Web 模式启动
 CMD ["artisan", "--web", "--web-host", "0.0.0.0", "--web-port", "8080"]
