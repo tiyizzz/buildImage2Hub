@@ -1,10 +1,11 @@
 FROM ubuntu:22.04
 
+ENV DEBIAN_FRONTEND=noninteractive
+
 # ==========================================
 # 1. 环境准备与依赖安装
 # ==========================================
-ENV DEBIAN_FRONTEND=noninteractive
-
+# 修正点：增加了 libxcb*, libdbus* 等关键底层库
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     supervisor \
@@ -17,6 +18,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxfixes3 \
     libxi6 \
     libxxf86vm1 \
+    libxcb-xinerama0 \
+    libxcb-cursor0 \
+    libxcb-icccm4 \
+    libxcb-keysyms1 \
+    libxcb-shape0 \
+    libxcb-xfixes0 \
+    libxcb-render-util0 \
+    libdbus-1-3 \
     xvfb \
     x11vnc \
     novnc \
@@ -28,7 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ==========================================
-# 2. 下载 AppImage (仅下载，不解压)
+# 2. 下载 AppImage
 # ==========================================
 ARG VERSION=v4.0.2
 ENV ARTISAN_URL="https://github.com/artisan-roaster-scope/artisan/releases/download/${VERSION}/artisan-linux-${VERSION#v}.AppImage"
@@ -38,47 +47,39 @@ RUN cd /tmp && \
     chmod +x /tmp/artisan.AppImage
 
 # ==========================================
-# 3. 配置 Supervisor 管理进程
+# 3. 配置 Supervisor
 # ==========================================
 RUN mkdir -p /etc/supervisor/conf.d/
 
-# 编写 supervisor 配置文件
+# 修正点：增加了 --debug 参数，这样如果还报错，我们能在日志里看到具体缺什么
 COPY <<EOF /etc/supervisor/conf.d/supervisord.conf
 [supervisord]
 nodaemon=true
 
-# 1. 启动虚拟显示器 (分辨率 1280x800)
 [program:xvfb]
 command=/usr/bin/Xvfb :99 -screen 0 1280x800x24
 autorestart=true
 priority=100
 
-# 2. 启动 VNC 服务 (监听 5900 端口)
 [program:x11vnc]
 command=/usr/bin/x11vnc -display :99 -forever -shared -rfbport 5900 -nopw
 autorestart=true
 priority=200
 depends_on=xvfb
 
-# 3. 启动 noVNC (修正后的命令)
-# 使用 websockify 将 VNC 端口 (5900) 映射到 Web 端口 (6080)
 [program:novnc]
 command=/usr/bin/websockify --web=/usr/share/novnc/ 6080 localhost:5900
 autorestart=true
 priority=300
 depends_on=x11vnc
 
-# 4. 启动 Artisan (修正环境变量的命令)
-# 设置 PYTHONPATH，确保 AppImage 能找到其内部的 Python 库
 [program:artisan]
-command=/tmp/artisan.AppImage
+# 增加了 --debug 参数用于输出详细日志
+command=/tmp/artisan.AppImage --debug
 environment=DISPLAY=":99",PYTHONPATH="/usr/lib/python3.10:/usr/lib/python3"
 autorestart=true
 priority=400
 depends_on=xvfb
 EOF
 
-# ==========================================
-# 4. 启动
-# ==========================================
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
