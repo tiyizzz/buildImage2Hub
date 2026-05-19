@@ -11,20 +11,15 @@ on:
     # 👇 核心：手动触发时显示下拉框选择版本
     inputs:
       version:
-        description: '选择 Artisan 版本（latest = 自动最新）'
+        description: '选择 NewApi 版本'
         required: true
         default: 'latest'
         type: choice
         options:
           - latest
-          - v4.0.3-beta
-          - v4.0.2
-          - v4.0.0
-          - v3.6-beta
-          - v3.4.0
-          - v3.2.0
-          - v3.1.4
-          - v3.1.2
+          - v1.0.0-rc.6
+          - v1.0.0-rc.5
+          - v1.0.0-rc.4
 # 定义任务
 jobs:
   build-and-push:
@@ -48,26 +43,25 @@ jobs:
           install: true  # 确保安装最新版Buildx，支持多架构
           
       # ==========================================
-      # 获取版本：如果选 latest 就自动拿最新，否则用你选的
+      # 修复：正确获取 latest 版本
       # ==========================================
       - name: 获取并确定版本号
         id: get_version
         run: |
           if [ "${{ github.event.inputs.version }}" = "latest" ]; then
-            VERSION=$(curl -s git clone https://github.com/QuantumNous/new-api.git | jq -r .tag_name)
+            VERSION=$(curl -s https://api.github.com/repos/QuantumNous/new-api/releases/latest | jq -r .tag_name)
           else
             VERSION=${{ github.event.inputs.version }}
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "✅ 最终构建版本：$VERSION"   
-          
+          echo "✅ 最终构建版本：$VERSION"
+
       - name: 打印构建信息
         run: |
           echo "====================================="
           echo "📦 选择的版本：${{ github.event.inputs.version }}"
           echo "🚀 实际构建版本：${{ env.VERSION }}"
-          echo "🖥  架构：amd64 + arm64"
-          echo "🌐 模式：官方 Web 8080"
+          echo "🖥 架构：amd64 + arm64"
           echo "====================================="
           
       # 步骤5：登录Docker Hub（使用配置的密钥）
@@ -76,17 +70,21 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
+      # 核心：克隆指定版本的 new-api 代码
+      - name: Clone new-api at specified version
+        run: |
+          git clone -b ${{ env.VERSION }} --single-branch https://github.com/QuantumNous/new-api.git new-api
 
       # 多架构构建并推送
       - name: 构建并推送
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: Dockerfile.artisan  # 这里写你自定义的Dockerfile名称
+          context: ./new-api  # 指向克隆下来的代码目录
+          file: ./new-api/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           build-args:  |
             VERSION=${{ env.VERSION }}
           tags: |
-            ${{ secrets.DOCKER_HUB_USERNAME }}/artisan-web:latest
-            ${{ secrets.DOCKER_HUB_USERNAME }}/artisan-web:${{ env.VERSION }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/new-api:latest
+            ${{ secrets.DOCKER_HUB_USERNAME }}/new-api:${{ env.VERSION }}
