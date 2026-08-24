@@ -13,26 +13,19 @@ on:
           - v0.3.212
           - v0.3.210
 
+env:
+  DOCKER_REPO: ${{ secrets.DOCKER_HUB_USERNAME }}/mockforge
+
 jobs:
-  build-and-push:
+  build-amd64:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-
     steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: 设置 QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: 设置Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          install: true
-
-      - name: 获取并确定版本号
+      - name: 获取版本号
         id: get_version
         run: |
           if [ "${{ github.event.inputs.version }}" = "latest" ]; then
@@ -41,71 +34,126 @@ jobs:
             VERSION=${{ github.event.inputs.version }}
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "✅ 最终构建版本：$VERSION"
 
-      - name: 打印构建信息
-        run: |
-          echo "====================================="
-          echo "📦 选择的版本：${{ github.event.inputs.version }}"
-          echo "🚀 实际构建版本：${{ env.VERSION }}"
-          echo "🖥 架构：amd64 + arm64"
-          echo "====================================="
-
-      - name: 登录 Docker Hub
+      - name: Login DockerHub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-   
-      - name: Install ARM64 dependencies
-        run: |
-                sudo dpkg --add-architecture arm64
-                sudo apt-get update
-                sudo apt-get install -y \
-                gcc-aarch64-linux-gnu \
-                libssl-dev:arm64 \
-                pkg-config-aarch64-linux-gnu
-    
-      - name: Clone mockforge 指定版本源码
-        run: |
-          git clone -b ${{ env.VERSION }} --single-branch https://github.com/saasy-solutions/mockforge.git mockforge-src
 
-      - name: 写入修复版 Dockerfile
+      - name: Clone mockforge 源码
+        run: git clone -b ${{ env.VERSION }} --single-branch https://github.com/saasy-solutions/mockforge.git src
+
+      - name: 写入Dockerfile
         run: |
-          cat > ./mockforge-src/Dockerfile.build << 'EOF'
-          # 匹配项目要求的Rust版本
+          cat > ./src/Dockerfile << 'EOF'
           FROM rust:1.83-slim AS builder
           WORKDIR /build
-
-          RUN apt-get update && apt-get install -y --no-install-recommends \
-              git \
-              build-essential \
-              protobuf-compiler \
-              libssl-dev \
-              ca-certificates \
-              && rm -rf /var/lib/apt/lists/*
-
+          RUN apt-get update && apt-get install -y --no-install-recommends git build-essential protobuf-compiler libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
           COPY . .
-          # ✅ Mockforge 真实二进制名字：mockforge‑cli
           RUN cargo build --release --bin mockforge-cli --features cloud
 
           FROM debian:bookworm-slim
-          RUN apt-get update && apt-get install -y --no-install-recommends \
-              curl ca-certificates libssl3 \
-              && rm -rf /var/lib/apt/lists/*
-
+          RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
           COPY --from=builder /build/target/release/mockforge-cli /usr/local/bin/mockforge
           EXPOSE 3000 3001 9080
           ENTRYPOINT ["mockforge","serve"]
           EOF
 
-      - name: 构建并推送多架构镜像
+      - name: Build & Push amd64
         uses: docker/build-push-action@v6
         with:
-          context: ./mockforge-src
-          file: ./mockforge-src/Dockerfile.build
-          platforms: linux/amd64,linux/arm64
+          context: ./src
+          file: ./src/Dockerfile
+          platforms: linux/amd64
           push: true
-          tags: |
-            ${{ secrets.DOCKER_HUB_USERNAME }}/mockforge:latest
-            ${{ secrets.DOCKER_HUB_USERNAME }}/mockforge:${{ env.VERSION }}
+          tags: ${{ env.DOCKER_REPO }}:${{ env.VERSION }}-amd64
+
+  build-arm64:
+    # 👉原生ARM64运行器，彻底告别QEMU仿真编译失败
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 获取版本号
+        id: get_version
+        run: |
+          if [ "${{ github.event.inputs.version }}" = "latest" ]; then
+            VERSION=$(curl -s https://api.github.com/repos/saasy-solutions/mockforge/releases/latest | jq -r .tag_name)
+          else
+            VERSION=${{ github.event.inputs.version }}
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Login DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Clone mockforge 源码
+        run: git clone -b ${{ env.VERSION }} --single-branch https://github.com/saasy-solutions/mockforge.git src
+
+      - name: 写入Dockerfile
+        run: |
+          cat > ./src/Dockerfile << 'EOF'
+          FROM rust:1.83-slim AS builder
+          WORKDIR /build
+          RUN apt-get update && apt-get install -y --no-install-recommends git build-essential protobuf-compiler libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
+          COPY . .
+          RUN cargo build --release --bin mockforge-cli --features cloud
+
+          FROM debian:bookworm-slim
+          RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
+          COPY --from=builder /build/target/release/mockforge-cli /usr/local/bin/mockforge
+          EXPOSE 3000 3001 9080
+          ENTRYPOINT ["mockforge","serve"]
+          EOF
+
+      - name: Build & Push arm64
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src
+          file: ./src/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: ${{ env.DOCKER_REPO }}:${{ env.VERSION }}-arm64
+
+  merge-manifest:
+    needs: [build-amd64, build-arm64]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: 获取版本号
+        id: get_version
+        run: |
+          if [ "${{ github.event.inputs.version }}" = "latest" ]; then
+            VERSION=$(curl -s https://api.github.com/repos/saasy-solutions/mockforge/releases/latest | jq -r .tag_name)
+          else
+            VERSION=${{ github.event.inputs.version }}
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Login DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: 合并多架构镜像清单
+        run: |
+          docker manifest create ${{ env.DOCKER_REPO }}:${{ env.VERSION }} \
+            ${{ env.DOCKER_REPO }}:${{ env.VERSION }}-amd64 \
+            ${{ env.DOCKER_REPO }}:${{ env.VERSION }}-arm64
+          docker manifest push ${{ env.DOCKER_REPO }}:${{ env.VERSION }}
+
+          docker manifest create ${{ env.DOCKER_REPO }}:latest \
+            ${{ env.DOCKER_REPO }}:${{ env.VERSION }}-amd64 \
+            ${{ env.DOCKER_REPO }}:${{ env.VERSION }}-arm64
+          docker manifest push ${{ env.DOCKER_REPO }}:latest
