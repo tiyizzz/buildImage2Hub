@@ -44,18 +44,26 @@ jobs:
       - name: Clone mockforge 源码
         run: git clone -b ${{ env.VERSION }} --single-branch https://github.com/saasy-solutions/mockforge.git src
 
-      - name: 写入Dockerfile
+      - name: 写入修复版Dockerfile
         run: |
           cat > ./src/Dockerfile << 'EOF'
           FROM rust:1.83-slim AS builder
           WORKDIR /build
-          RUN apt-get update && apt-get install -y --no-install-recommends git build-essential protobuf-compiler libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
+
+          RUN apt-get update && apt-get install -y --no-install-recommends \
+              git build-essential protobuf-compiler libssl-dev ca-certificates \
+              && rm -rf /var/lib/apt/lists/*
+
           COPY . .
-          RUN cargo build --release --bin mockforge-cli --features cloud
+          WORKDIR /build/crates/cli
+          RUN cargo build --release --bin mockforge-cli
 
           FROM debian:bookworm-slim
-          RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
-          COPY --from=builder /build/target/release/mockforge-cli /usr/local/bin/mockforge
+          RUN apt-get update && apt-get install -y --no-install-recommends \
+              curl ca-certificates libssl3 \
+              && rm -rf /var/lib/apt/lists/*
+
+          COPY --from=builder /build/crates/cli/target/release/mockforge-cli /usr/local/bin/mockforge
           EXPOSE 3000 3001 9080
           ENTRYPOINT ["mockforge","serve"]
           EOF
@@ -70,7 +78,6 @@ jobs:
           tags: ${{ env.DOCKER_REPO }}:${{ env.VERSION }}-amd64
 
   build-arm64:
-    # 👉原生ARM64运行器，彻底告别QEMU仿真编译失败
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
@@ -97,18 +104,26 @@ jobs:
       - name: Clone mockforge 源码
         run: git clone -b ${{ env.VERSION }} --single-branch https://github.com/saasy-solutions/mockforge.git src
 
-      - name: 写入Dockerfile
+      - name: 写入修复版Dockerfile
         run: |
           cat > ./src/Dockerfile << 'EOF'
           FROM rust:1.83-slim AS builder
           WORKDIR /build
-          RUN apt-get update && apt-get install -y --no-install-recommends git build-essential protobuf-compiler libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
+
+          RUN apt-get update && apt-get install -y --no-install-recommends \
+              git build-essential protobuf-compiler libssl-dev ca-certificates \
+              && rm -rf /var/lib/apt/lists/*
+
           COPY . .
-          RUN cargo build --release --bin mockforge-cli --features cloud
+          WORKDIR /build/crates/cli
+          RUN cargo build --release --bin mockforge-cli
 
           FROM debian:bookworm-slim
-          RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
-          COPY --from=builder /build/target/release/mockforge-cli /usr/local/bin/mockforge
+          RUN apt-get update && apt-get install -y --no-install-recommends \
+              curl ca-certificates libssl3 \
+              && rm -rf /var/lib/apt/lists/*
+
+          COPY --from=builder /build/crates/cli/target/release/mockforge-cli /usr/local/bin/mockforge
           EXPOSE 3000 3001 9080
           ENTRYPOINT ["mockforge","serve"]
           EOF
