@@ -61,36 +61,40 @@ jobs:
         run: |
           git clone -b ${{ env.VERSION }} --single-branch https://github.com/saasy-solutions/mockforge.git mockforge-src
 
-      - name: 复制优化版多阶段Dockerfile
+      - name: 写入修复版 Dockerfile
         run: |
-          cat > ./mockforge-src/Dockerfile.multi << 'EOF'
-          FROM rust:1.91-slim AS builder
+          cat > ./mockforge-src/Dockerfile.build << 'EOF'
+          # 匹配项目要求的Rust版本
+          FROM rust:1.83-slim AS builder
           WORKDIR /build
+
           RUN apt-get update && apt-get install -y --no-install-recommends \
-              git build-essential protobuf-compiler libssl-dev ca-certificates \
+              git \
+              build-essential \
+              protobuf-compiler \
+              libssl-dev \
+              ca-certificates \
               && rm -rf /var/lib/apt/lists/*
 
-          COPY Cargo.toml Cargo.lock ./
-          RUN mkdir src && echo "fn main(){}" > src/main.rs
-          RUN cargo build --release --bin mockforge
-
-          RUN rm -rf src
           COPY . .
-          RUN cargo build --release --bin mockforge --features cloud
+          # ✅ Mockforge 真实二进制名字：mockforge‑cli
+          RUN cargo build --release --bin mockforge-cli --features cloud
 
           FROM debian:bookworm-slim
           RUN apt-get update && apt-get install -y --no-install-recommends \
-              curl ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
-          COPY --from=builder /build/target/release/mockforge /usr/local/bin/mockforge
+              curl ca-certificates libssl3 \
+              && rm -rf /var/lib/apt/lists/*
+
+          COPY --from=builder /build/target/release/mockforge-cli /usr/local/bin/mockforge
           EXPOSE 3000 3001 9080
           ENTRYPOINT ["mockforge","serve"]
           EOF
 
       - name: 构建并推送多架构镜像
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./mockforge-src
-          file: ./mockforge-src/Dockerfile.multi
+          file: ./mockforge-src/Dockerfile.build
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
