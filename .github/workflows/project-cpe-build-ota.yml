@@ -8,6 +8,16 @@ on:
         required: false
         type: boolean
         default: true
+      source_repo:
+        description: 'Remote source repository to build from (owner/repo)'
+        required: false
+        type: string
+        default: '1orz/project-cpe'
+      source_ref:
+        description: 'Git ref/branch/tag to checkout (leave empty for default branch)'
+        required: false
+        type: string
+        default: ''
 
 env:
   CARGO_TERM_COLOR: always
@@ -20,9 +30,15 @@ jobs:
     runs-on: ubuntu-24.04-arm
 
     steps:
+      # 从远端仓库拉取源码（默认 1orz/project-cpe）。
+      # 公开仓库可匿名克隆；若仓库为私有或需更高 API 限额，
+      # 请在仓库 Secrets 中配置 CHECKOUT_PAT（具备 repo 读权限的个人访问令牌）。
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          repository: ${{ inputs.source_repo }}
+          ref: ${{ inputs.source_ref }}
+          token: ${{ secrets.CHECKOUT_PAT }}
           fetch-depth: 0
 
       - name: Read VERSION
