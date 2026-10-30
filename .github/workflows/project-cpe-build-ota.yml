@@ -1,3 +1,15 @@
+# Build OTA Package —— 从远端仓库拉取源码并构建 OTA 升级包
+#
+# 默认从 https://github.com/1orz/project-cpe 拉取源码构建。
+# 其他项目可直接复用本工作流：
+#   1. 将本文件放入目标仓库的 .github/workflows/
+#   2. 在 Actions 页手动触发（workflow_dispatch），可通过入参指定：
+#        - source_repo：远端仓库（格式 owner/repo），默认 1orz/project-cpe
+#        - source_ref ：分支 / tag / commit，留空则拉默认分支
+#        - use_upx    ：是否用 UPX 压缩二进制，默认开启
+#   3. 拉取远端仓库的 token 已做兜底：未配置 CHECKOUT_PAT 时自动回退到
+#      github.token，公开仓库（如 1orz/project-cpe）可直接克隆；若源码仓库
+#      为私有，请在仓库 Secrets 中配置 CHECKOUT_PAT（具备 repo 读权限的 PAT）。
 name: Build-Project-Cpe-Ota
 
 on:
@@ -31,14 +43,15 @@ jobs:
 
     steps:
       # 从远端仓库拉取源码（默认 1orz/project-cpe）。
-      # 公开仓库可匿名克隆；若仓库为私有或需更高 API 限额，
-      # 请在仓库 Secrets 中配置 CHECKOUT_PAT（具备 repo 读权限的个人访问令牌）。
+      # token 兜底策略：优先用 CHECKOUT_PAT（私有仓库 / 更高 API 限额时使用，
+      # 需在仓库 Secrets 配置具备 repo 读权限的个人访问令牌）；未配置时自动
+      # 回退到 github.token，对公开仓库（如 1orz/project-cpe）完全够用。
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
           repository: ${{ inputs.source_repo }}
           ref: ${{ inputs.source_ref }}
-          token: ${{ secrets.CHECKOUT_PAT }}
+          token: ${{ secrets.CHECKOUT_PAT || github.token }}
           fetch-depth: 0
 
       - name: Read VERSION
