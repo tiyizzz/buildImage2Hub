@@ -1,4 +1,4 @@
-name: Build OTA Package
+name: Build-Project-Cpe-Ota
 
 on:
   workflow_dispatch:
