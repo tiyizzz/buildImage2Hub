@@ -3,7 +3,7 @@
 # 说明：原先的“每天 03:00 (UTC) 定期编译”已改为【仅手动触发】（workflow_dispatch）。
 #       如需恢复定时编译，取消下方 on.schedule 段的注释并按需调整 cron 即可。
 
-name: Build RTLPlayground default RY-8GT-1SX (custom)
+name: Build RTLPlayground (custom)
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ on:
       machine:
         description: >-
           设备型号 MACHINE（machine/ 目录下的 .c 文件名）。
-          多个机型用空格分隔，如 "FG_8GT_1SX DEFAULT_8C_1SFP"；填 all 则编译全部机型。
+          多个机型用空格分隔，如 "FG_8GT_1SX DEFAULT_8C_1SFP"；填 all 则编译全部机型。FG_8GT_1SX是RY-8GT-1SY主板
         required: true
         default: 'FG_8GT_1SX'
       ip:
