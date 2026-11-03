@@ -1,7 +1,7 @@
 # RTLPlayground 固件：自定义 / 定期编译 Workflow
 
 
-name: Build RTLPlayground (custom)
+name: Build RTLPlayground default RY-8GT-1SX (custom)
 
 on:
   workflow_dispatch:
