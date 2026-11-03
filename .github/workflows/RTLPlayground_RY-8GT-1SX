@@ -1,5 +1,7 @@
-# RTLPlayground 固件：自定义 / 定期编译 Workflow
-
+# RTLPlayground 固件：自定义 / 手动编译 Workflow
+#
+# 说明：原先的“每天 03:00 (UTC) 定期编译”已改为【仅手动触发】（workflow_dispatch）。
+#       如需恢复定时编译，取消下方 on.schedule 段的注释并按需调整 cron 即可。
 
 name: Build RTLPlayground default RY-8GT-1SX (custom)
 
@@ -38,10 +40,10 @@ on:
           要编译的上游分支 / Tag / 提交SHA（留空用上游默认分支 main）
         required: false
         default: ''
-  schedule:
+#  schedule:
     # 每天 03:00 (UTC) 自动编译上游最新代码，做到“及时更新”。
     # 想改频率就改 cron：分 时 日 月 周。例如每周一早上 -> '0 3 * * 1'
-    - cron: '0 3 * * *'
+#    - cron: '0 3 * * *'
 
 # 定时任务只在默认分支运行；本 workflow 只读取上游公开代码并上传产物，无需写仓库权限
 permissions:
