@@ -1,0 +1,162 @@
+# RTLPlayground 固件：自定义 / 定期编译 Workflow
+
+
+name: Build RTLPlayground (custom)
+
+on:
+  workflow_dispatch:
+    inputs:
+      machine:
+        description: >-
+          设备型号 MACHINE（machine/ 目录下的 .c 文件名）。
+          多个机型用空格分隔，如 "FG_8GT_1SX DEFAULT_8C_1SFP"；填 all 则编译全部机型。
+        required: true
+        default: 'FG_8GT_1SX'
+      ip:
+        description: 预置交换机 IP（可选，如 192.168.10.247）
+        required: false
+        default: ''
+      gateway:
+        description: 预置网关（可选）
+        required: false
+        default: ''
+      netmask:
+        description: 预置子网掩码（可选）
+        required: false
+        default: ''
+      extra_config:
+        description: >-
+          附加 config.txt 配置行，每行一条（可选），如 "port 1 name uplink"、"session 300"、"igmp on"
+        required: false
+        default: ''
+      build_oem_installer:
+        description: 是否同时编译 OEM 原厂网页升级镜像 (rtlplayground_oem_upgrade.bin)
+        type: boolean
+        default: false
+      ref:
+        description: >-
+          要编译的上游分支 / Tag / 提交SHA（留空用上游默认分支 main）
+        required: false
+        default: ''
+  schedule:
+    # 每天 03:00 (UTC) 自动编译上游最新代码，做到“及时更新”。
+    # 想改频率就改 cron：分 时 日 月 周。例如每周一早上 -> '0 3 * * 1'
+    - cron: '0 3 * * *'
+
+# 定时任务只在默认分支运行；本 workflow 只读取上游公开代码并上传产物，无需写仓库权限
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      MACHINE: ${{ inputs.machine || 'FG_8GT_1SX' }}
+      IP: ${{ inputs.ip }}
+      GW: ${{ inputs.gateway }}
+      NETMASK: ${{ inputs.netmask }}
+      EXTRA_CONFIG: ${{ inputs.extra_config }}
+      BUILD_OEM: ${{ inputs.build_oem_installer || 'false' }}
+
+    steps:
+      # 基础构建依赖（ubuntu-latest 自带 git/make/gcc，这里补齐其余）
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make gcc xxd python-is-python3 libjson-c-dev zlib1g-dev
+
+      # sdcc 必须 >=4.5，从官方 SourceForge 下载 4.5.0 预编译包（与本地验证一致）
+      - name: Install SDCC 4.5 (8051 compiler)
+        run: |
+          curl -fL --retry 3 -o /tmp/sdcc.tar.bz2 \
+            "https://sourceforge.net/projects/sdcc/files/sdcc-linux-amd64/4.5.0/sdcc-4.5.0-amd64-unknown-linux2.5.tar.bz2/download"
+          tar xjf /tmp/sdcc.tar.bz2 -C /tmp
+          sudo cp -r /tmp/sdcc-4.5.0/* /usr/local/
+          echo "--- sdcc version ---"
+          sdcc --version | head -1
+
+      # 直接从原作者仓库拉取最新代码，拉到 RTLPlayground/ 子目录
+      - name: Checkout upstream logicog/RTLPlayground
+        uses: actions/checkout@v6
+        with:
+          repository: logicog/RTLPlayground
+          ref: ${{ inputs.ref || '' }}
+          path: RTLPlayground
+
+      - name: Show upstream commit
+        working-directory: RTLPlayground
+        run: |
+          echo "Latest upstream commit:"
+          git log -1 --format='%h %ci %s'
+
+      - name: Generate custom config.txt from inputs
+        working-directory: RTLPlayground
+        run: |
+          # 仅当提供了任一配置项时才覆盖 config.txt；全空则保留上游默认配置
+          if [ -n "$IP" ] || [ -n "$GW" ] || [ -n "$NETMASK" ] || [ -n "$EXTRA_CONFIG" ]; then
+            : > config.txt
+            [ -n "$IP" ] && echo "ip $IP" >> config.txt
+            [ -n "$GW" ] && echo "gw $GW" >> config.txt
+            [ -n "$NETMASK" ] && echo "netmask $NETMASK" >> config.txt
+            if [ -n "$EXTRA_CONFIG" ]; then
+              printf '%b\n' "$EXTRA_CONFIG" >> config.txt
+            fi
+            echo "----- generated config.txt -----"
+            cat config.txt
+          else
+            echo "No custom config provided, using upstream default config.txt"
+          fi
+
+      # machine 参数用法（也见上方 workflow_dispatch 的 inputs 说明）：
+      #   - 单机型：FG_8GT_1SX
+      #   - 多机型：用空格分隔，如 FG_8GT_1SX DEFAULT_8C_1SFP
+      #   - 全部：all（编译 machine/ 下所有机型）
+      #
+      # 编译并按机型归拢产物。每个机型一个顶层目录，内含：
+      #   rtlplayground-v<版本>-<机型>.bin          直刷镜像（文件名自带机型）
+      #   rtlplayground_oem_upgrade-<机型>.bin      OEM 升级镜像（仅勾选时，按机型单独编译）
+      # OEM 镜像不是通用镜像（每个机型固件不同），故在多机型模式下对每个机型单独
+      # 编一次 installer，确保目录里那一个 OEM 与本机型一一对应。
+      - name: Build and stage firmware by machine
+        working-directory: RTLPlayground
+        run: |
+          set -e
+          if [ "$MACHINE" = "all" ]; then
+            machines=$(basename -a machine/*.c | sed 's/\.c$//')
+          else
+            machines="$MACHINE"
+          fi
+          ok=0; fail=0
+          for m in $machines; do
+            echo "=== Building $m ==="
+            if ! make MACHINE="$m"; then
+              echo "FAILED: $m (firmware)"
+              fail=$((fail+1)); continue
+            fi
+            # 归拢直刷镜像到 staging/<机型>/
+            mkdir -p "$GITHUB_WORKSPACE/staging/$m"
+            cp output/$m/*.bin "$GITHUB_WORKSPACE/staging/$m/"
+            # 可选：为当前机型单独编译 OEM 升级镜像
+            if [ "$BUILD_OEM" = "true" ]; then
+              if (cd installer && make) && \
+                 cp installer/output/rtlplayground_oem_upgrade.bin \
+                    "$GITHUB_WORKSPACE/staging/$m/rtlplayground_oem_upgrade-$m.bin"; then
+                :
+              else
+                echo "FAILED: $m (oem installer)"
+              fi
+            fi
+            ok=$((ok+1))
+          done
+          echo "Machines built ok=$ok failed=$fail"
+          [ "$fail" -eq 0 ] || echo "::warning:: $fail machine(s) failed"
+          echo "--- staged structure ---"
+          find "$GITHUB_WORKSPACE/staging" -type f | sort
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rtlplayground-firmware
+          path: staging
+          if-no-files-found: error
